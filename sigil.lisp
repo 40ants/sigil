@@ -1,98 +1,109 @@
-(require :parenscript)
+(in-package #:sigil)
 
-(defparameter *include-paths* ())
+(defvar *include-paths* ())
 
-;; add 'load' to parenscript compiler
-(ps:defpsmacro load (file)
-  ;;(format *error-output* "~A~%" *include-paths*)
-  (let (code)
-      (catch 'found
-        (dolist (include-path *include-paths*)
-          (let ((path (concatenate 'string (directory-namestring include-path) file)))
-            ;;(format *error-output* "Searching: ~A~%" path)
-            (when (probe-file path)
-              (with-open-file (f path)
-                ;;(format *error-output* "Found: ~A~%" path)
-                (do
-                 ((form (read f nil) (read f nil)))
-                 ((not form))
-                  (push form code)))
-              (throw 'found (cons 'progn (nreverse code))))))
-          (format *error-output* "sigil: Cannot find load file: ~A~%" file))
-      ))
+
+(defun get-system-part (filename)
+  "For filename like \"some.foo:bar.lisp\" returns \"some.foo\" string"
+  (let ((pos (position #\: filename)))
+    (when pos
+      (subseq filename 0 pos))))
+
+
+(defun get-file-part (filename)
+  "For filename like \"some.foo:bar.lisp\" returns \"bar.lisp\" string.
+If there is no system part, then just return filename."
+  (let ((pos (position #\: filename)))
+    (if pos
+        (subseq filename (1+ pos))
+        filename)))
+
+
+(defun find-system-path (system-name)
+  "Returns path to system's files or throws error"
+
+  (let ((path (ql:where-is-system system-name)))
+    (if path
+        path
+        (error (format nil "Unable to find path for system \"~A\"."
+                       system-name)))))
+
+
+(defun find-file (file)
+  (let ((system-name (get-system-part file)))
+    (if system-name
+        (let ((*include-paths*
+              (cons (find-system-path system-name)
+                    *include-paths*)))
+          (find-real-file (get-file-part file)))
+        (find-real-file file))))
+
+
+(defun find-real-file (file)
+  "Searches file with given name in *include-paths* directories"
+  (block found
+      (dolist (include-path *include-paths*)
+        (let* ((search-path (directory-namestring include-path))
+               (path (concatenate 'string search-path file)))
+          
+          (format *error-output* "Checking include path: ~A~%" search-path)
+          
+          (when (probe-file path)
+            (format *error-output* "File ~A readed successfuly.~%" file)
+            (return-from found path))))
+      
+      (error (format nil "Cannot find load file \"~A\"~%" file))))
+
+
+(defun compile-ps-file (filename)
+  "Opens filename and outputs JS to stdout"
+  
+  (let* ((filename (find-file filename)))
+    (format t "/* ~A */~%" filename)
+    (let ((*include-paths* (cons (directory-namestring filename)
+                                 *include-paths*)))
+      (with-open-file (f filename)
+        (ps2js f)))))
+
+
+(defun simple-js-form (form)
+  "Outputs usual form"
+  (format t  "/* ~A */~%" form)
+  (format t "~A~%" (ps:ps* form)))
+
+
+(defun output-import-statement (js-library obj)
+  "Compiles:
+       (import \"react\" \"React\")
+   into:
+       import React from 'react';
+
+   If third argument is list, like that:
+       (import \"react-router\" '(\"Router\" \"browserHistory\"))
+   then compiles into:
+       import { Router, browserHistory } from 'react-router';
+   "
+  (format t
+          (if (listp obj)
+              "import { ~{~a~^, ~} } from '~A';"
+              "import ~A from '~A';")
+          obj
+          js-library))
+
+
+(defun form2js (form)
+  (case (car form)
+    ('import (funcall #'output-import-statement (tail form)))
+    ('load (compile-ps-file (second form)))
+    (otherwise (simple-js-form form))))
+
 
 (defun ps2js (f)
+  "Reads forms from stream f and outputs to stdout"
   (in-package :ps)
   (do
    ((form (read f nil) (read f nil)))
    ((not form))
-    (format t  "/* ~A */~%" form)
-    (format t "~A~%" (ps:ps* form))))
+    (form2js form)))
 
-(defmacro while (test &body body)
-  `(loop
-      (when (not ,test)
-        (return))
-      ,@body))
 
-(defun repl ()
-  (let* ((node (run-program "node" '("-i") :search t :input :stream :output :stream :wait nil))
-         (node-input (process-input node))
-         (node-output (process-output node)))
-    (loop
-       (format *error-output* "> ")
-       (force-output *error-output*)
-       (read-char node-output) ; eat initial prompt
-       (handler-case
-           (let ((form (read)))
-             (format node-input "~A~%" (ps:ps* form))
-             (force-output node-input)
-             (loop
-                (let ((c (read-char node-output)))
-                  (when (and (char= #\Newline c)
-                             (char= #\> (peek-char nil node-output)))
-                    (read-char node-output)
-                    (fresh-line)
-                    (return))
-                  (princ c)
-                  (force-output))))
-         (sb-sys:interactive-interrupt () (sb-ext:exit))
-         (end-of-file () (sb-ext:exit))
-         ))))
-
-(defun main (argv)
-  (push (probe-file ".") *include-paths*)
-  (if (cdr argv)
-      (progn
-        (pop argv)
-        (while argv
-          (let ((arg (pop argv)))
-            (cond 
-              ((string= arg "-I")
-               (let ((dir (pop argv)))
-                 (push (probe-file dir) *include-paths*)))
-              ((string= arg "-i") (repl))
-              ((string= arg "--eval")
-               (let ((code (pop argv)))
-                 (format t "/* --eval ~A~% */" (read-from-string code))
-                 (in-package :ps)
-                 (eval (read-from-string code))))
-              ((string= arg "--pseval")
-               (let ((code (pop argv)))
-                 (format t "/* --pseval ~A~% */" (read-from-string code))
-                 (ps:ps* (read-from-string code))))
-              (t
-               (let ((probe-results (probe-file arg)))
-                 (when probe-results
-                   ;; Add current file directory to include paths so they can relative load properly
-                   (push (directory-namestring probe-results) *include-paths*)
-                   
-                   (setf *include-paths* (reverse *include-paths*))
-                   (with-open-file (f arg)
-                     (handler-bind
-                         ((error
-                           (lambda (e) 
-                             (format *error-output* "~A~%" e)
-                             (sb-ext:exit :code 1))))
-                       (ps2js f))))))))))
-      (repl)))

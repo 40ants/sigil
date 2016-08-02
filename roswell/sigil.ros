@@ -1,0 +1,21 @@
+#!/bin/sh
+#|-*- mode:lisp -*-|#
+#| Parenscript to JS compiler
+exec ros -Q -- $0 "$@"
+|#
+(defpackage :ros.script.sigil.3679147098
+  (:use :cl))
+
+(in-package :ros.script.sigil.3679147098)
+
+  
+(push (probe-file ".") asdf:*central-registry*)
+(ql:quickload "sigil")
+
+
+(defun main (&rest argv)
+  (declare (ignorable argv))
+
+  (sigil-cli:main argv))
+
+;;; vim: set ft=lisp lisp:
