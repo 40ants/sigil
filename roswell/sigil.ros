@@ -8,9 +8,13 @@ exec ros -Q -- $0 "$@"
 
 (in-package :ros.script.sigil.3679147098)
 
-  
+
+;; making local system available to compiler
 (push (probe-file ".") asdf:*central-registry*)
-(ql:quickload "sigil")
+
+;; load sigil and suppress output from quicklisp
+(with-output-to-string (*standard-output*)
+  (ql:quickload "sigil"))
 
 
 (defun main (&rest argv)

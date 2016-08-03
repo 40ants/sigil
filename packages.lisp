@@ -1,6 +1,6 @@
 (defpackage sigil
   (:use #:common-lisp)
-  (:export compile-file))
+  (:export compile-ps-file))
 
 
 (defpackage sigil-cli

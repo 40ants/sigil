@@ -41,24 +41,26 @@ If there is no system part, then just return filename."
 
 (defun find-real-file (file)
   "Searches file with given name in *include-paths* directories"
-  (block found
-      (dolist (include-path *include-paths*)
-        (let* ((search-path (directory-namestring include-path))
-               (path (concatenate 'string search-path file)))
+  (if (probe-file file)
+      file
+      (block found
+        (dolist (include-path *include-paths*)
+          (let* ((search-path (directory-namestring include-path))
+                 (path (concatenate 'string search-path file)))
           
-          (format *error-output* "Checking include path: ~A~%" search-path)
+            (format *error-output* "Checking include path: ~A~%" search-path)
           
-          (when (probe-file path)
-            (format *error-output* "File ~A readed successfuly.~%" file)
-            (return-from found path))))
+            (when (probe-file path)
+              (format *error-output* "File ~A readed successfuly.~%" file)
+              (return-from found path))))
       
-      (error (format nil "Cannot find load file \"~A\"~%" file))))
+        (error (format nil "Cannot find file \"~A\"~%" file)))))
 
 
 (defun compile-ps-file (filename)
   "Opens filename and outputs JS to stdout"
-  
-  (let* ((filename (find-file filename)))
+
+  (let* ((filename (find-file (namestring filename))))
     (format t "/* ~A */~%" filename)
     (let ((*include-paths* (cons (directory-namestring filename)
                                  *include-paths*)))
