@@ -1,6 +1,12 @@
 (in-package #:sigil)
 
 (defvar *include-paths* ())
+(defvar *verbose* nil)
+
+
+(defun log-message (message &rest args)
+  (when *verbose*
+    (apply #'format (append (list *error-output* message) args))))
 
 
 (defun get-system-part (filename)
@@ -48,10 +54,10 @@ If there is no system part, then just return filename."
           (let* ((search-path (directory-namestring include-path))
                  (path (concatenate 'string search-path file)))
           
-            (format *error-output* "Checking include path: ~A~%" search-path)
+            (log-message "Checking include path: ~A~%" search-path)
           
             (when (probe-file path)
-              (format *error-output* "File ~A readed successfuly.~%" file)
+              (log-message "File ~A readed successfuly.~%" file)
               (return-from found path))))
       
         (error (format nil "Cannot find file \"~A\"~%" file)))))
@@ -61,7 +67,7 @@ If there is no system part, then just return filename."
   "Opens filename and outputs JS to stdout"
 
   (let* ((filename (find-file (namestring filename))))
-    (format t "/* ~A */~%" filename)
+    (log-message "Compiling ~A~%" filename)
     (let ((*include-paths* (cons (directory-namestring filename)
                                  *include-paths*)))
       (with-open-file (f filename)
@@ -87,15 +93,15 @@ If there is no system part, then just return filename."
    "
   (format t
           (if (listp obj)
-              "import { ~{~a~^, ~} } from '~A';"
-              "import ~A from '~A';")
+              "import { ~{~a~^, ~} } from '~A';~%"
+              "import ~A from '~A';~%")
           obj
           js-library))
 
 
 (defun form2js (form)
   (case (car form)
-    ('import (funcall #'output-import-statement (tail form)))
+    ('import (apply #'output-import-statement (cdr form)))
     ('load (compile-ps-file (second form)))
     (otherwise (simple-js-form form))))
 

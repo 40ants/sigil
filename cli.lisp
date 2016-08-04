@@ -26,12 +26,17 @@
 (defun process-file (arg)
   ;; invert paths to make them come in user specified order
   (setf *include-paths* (reverse sigil::*include-paths*))
-  (handler-bind
-      ((error
-        (lambda (e)
-          (format *error-output* "~A~%" e)
-          (sb-ext:exit :code 1))))
-    (sigil:compile-ps-file arg)))
+
+  (if sigil::*verbose*
+      ;; for verbose output, output stacktrace to stderr
+      (sigil:compile-ps-file arg)
+      ;; otherwise, just print error message
+      (handler-bind
+          ((error
+            (lambda (e)
+              (format *error-output* "~A~%" e)
+              (sb-ext:exit :code 1))))
+        (sigil:compile-ps-file arg))))
 
 
 (defun main (argv)
@@ -40,7 +45,8 @@
   (if argv
       (while argv
         (let ((arg (pop argv)))
-          (cond 
+          (cond
+            ((string= arg "-v") (setf sigil::*verbose* t))
             ((string= arg "-I") (add-include-path (pop argv)))
             ((string= arg "-i") (sigil-repl:repl))
             ((string= arg "--eval") (eval-lisp (pop argv)))

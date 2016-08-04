@@ -49,11 +49,17 @@ Sigil comes with an interactive REPL (Read-Eval-Print-Loop) when
 invoked with -i (or no arguments), allowing you to type and evaluate
 Parenscript commands interactively.
 
+TODO
+----
+
+* Add ability to make (quickload "panic") in parenscript files.
+* Suppress output from --eval commands.
+
 License
 -------
 
 MIT
 
 --
-Burton Samograd
+Burton Samograd, Alexander Artemenko
 2015
