@@ -31,17 +31,24 @@ If there is no system part, then just return filename."
   (let ((path (ql:where-is-system system-name)))
     (if path
         path
-        (error (format nil "Unable to find path for system \"~A\"."
-                       system-name)))))
+        ;; try to quickload the system and search path again
+        (if (ql:quickload system-name :silent t)
+            (find-system-path system-name)
+            ;; or return error is system wasn't found
+            (error (format nil "Unable to find path for system \"~A\"."
+                           system-name))))))
 
 
 (defun find-file (file)
   (let ((system-name (get-system-part file)))
     (if system-name
+        ;; find file inside specified system
         (let ((*include-paths*
-              (cons (find-system-path system-name)
-                    *include-paths*)))
+               (cons (find-system-path system-name)
+                     *include-paths*)))
           (find-real-file (get-file-part file)))
+
+        ;; find file on filesystem
         (find-real-file file))))
 
 
@@ -99,11 +106,28 @@ If there is no system part, then just return filename."
           js-library))
 
 
+(defun load-lisp-system (name)
+  (with-output-to-string (*standard-output*)
+    (ql:quickload name :silent t)))
+
+
 (defun form2js (form)
-  (case (car form)
-    ('import (apply #'output-import-statement (cdr form)))
-    ('load (compile-ps-file (second form)))
-    (otherwise (simple-js-form form))))
+  "Outputs to stdout JS representation of the form"
+;;  (format t "Processing ~A~%" (car form))
+  (let* ((first-item (car form))
+         (item-symbol-name (when (symbolp first-item)
+                             (symbol-name first-item))))
+    
+    (macrolet ((is (name) `(equal item-symbol-name ,name)))
+      (cond
+        ((is "QUICKLOAD")
+         (load-lisp-system (second form)))
+        ((is "IMPORT")
+         (apply #'output-import-statement (cdr form)))
+        ((is "LOAD")
+         (compile-ps-file (second form)))
+        (t
+         (simple-js-form form))))))
 
 
 (defun ps2js (f)
