@@ -107,8 +107,9 @@ If there is no system part, then just return filename."
 
 
 (defun load-lisp-system (name)
-  (with-output-to-string (*standard-output*)
-    (ql:quickload name :silent t)))
+  ;; (format *error-output* "asdf:*central-registry*: ~A~%" asdf:*central-registry*)
+  ;; (format *error-output* "ql:*quicklisp-home*: ~A~%" ql:*quicklisp-home*)
+  (ql:quickload name :silent t))
 
 
 (defun form2js (form)
